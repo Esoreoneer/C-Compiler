@@ -360,11 +360,13 @@ class MiniCompilerGUI(ctk.CTk):
             codegen = CodeGenerator()
             asm_output = codegen.generate(ast)
 
-            out_dir = os.path.dirname(self.file_path)
+            # Normalize paths: convert all forward slashes to backslashes
+            out_dir = os.path.dirname(self.file_path).replace("/", "\\")
             base_name = os.path.splitext(os.path.basename(self.file_path))[0]
-            asm_path = os.path.join(out_dir, base_name + ".asm")
-            obj_path = os.path.join(out_dir, base_name + ".obj")
-            exe_path = os.path.join(out_dir, base_name + ".exe")
+            
+            asm_path = f"{out_dir}\\{base_name}.asm"
+            obj_path = f"{out_dir}\\{base_name}.obj"
+            exe_path = f"{out_dir}\\{base_name}.exe"
 
             with open(asm_path, "w") as f:
                 f.write(asm_output)
@@ -382,14 +384,15 @@ class MiniCompilerGUI(ctk.CTk):
             # --- ASSEMBLE ---
             self.log("[*] Assembling...")
             
-            # We construct the exact cmd.exe string, quoting ONLY the executable and the arguments individually
-            # /Fo needs to be right next to the path.
-            asm_cmd = f'call "{vcvars}" >nul && "{ml64}" /c /nologo "{asm_path}" /Fo"{obj_path}"'
-            
-            res_asm = subprocess.run(
-                asm_cmd, 
-                capture_output=True, text=True, shell=True
+            # We construct a raw batch command. We use `cd /d` to change to the directory
+            # so that ml64 doesn't have to deal with the spaces in the absolute path.
+            asm_cmd = (
+                f'cmd.exe /c "call "{vcvars}" >nul && '
+                f'cd /d "{out_dir}" && '
+                f'"{ml64}" /c /nologo "{base_name}.asm" /Fo"{base_name}.obj""'
             )
+            
+            res_asm = subprocess.run(asm_cmd, capture_output=True, text=True, shell=True)
             
             if res_asm.returncode != 0:
                 self.log("[-] Assembler Error:\n" + res_asm.stdout + res_asm.stderr)
@@ -397,18 +400,18 @@ class MiniCompilerGUI(ctk.CTk):
                 
             if not os.path.exists(obj_path):
                 self.log(f"[-] Error: Assembler claimed success, but {obj_path} was not created.")
-                self.log("This usually means the path has weird characters or permission issues.")
+                self.log("Assembler output:\n" + res_asm.stdout + res_asm.stderr)
                 return
 
             # --- LINK ---
             self.log("[*] Linking...")
-            # Added /ENTRY:main_wrapper so the linker knows where the program starts
-            link_cmd = f'call "{vcvars}" >nul && "{link}" /nologo /SUBSYSTEM:CONSOLE /ENTRY:main_wrapper "{obj_path}" /OUT:"{exe_path}"'
-            
-            res_link = subprocess.run(
-                link_cmd, 
-                capture_output=True, text=True, shell=True
+            link_cmd = (
+                f'cmd.exe /c "call "{vcvars}" >nul && '
+                f'cd /d "{out_dir}" && '
+                f'"{link}" /nologo /SUBSYSTEM:CONSOLE /ENTRY:main_wrapper "{base_name}.obj" /OUT:"{base_name}.exe""'
             )
+            
+            res_link = subprocess.run(link_cmd, capture_output=True, text=True, shell=True)
             
             if res_link.returncode != 0:
                 self.log("[-] Linker Error:\n" + res_link.stdout + res_link.stderr)
