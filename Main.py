@@ -216,18 +216,16 @@ class CodeGenerator:
             for stmt in func.body:
                 self.generate_statement(stmt)
                 
-            # Fallback return 0 if no return statement
             self.emit("    mov rax, 0")
             self.emit("    add rsp, 40")
             self.emit("    ret")
             self.emit(f"{func.name} ENDP")
         
-        # Create a wrapper main that calls the user's main and prints the result
         self.emit("\nmain_wrapper PROC")
         self.emit("    sub rsp, 40")
         self.emit("    call main")
-        self.emit("    mov rcx, rax") # First arg to printf (format string)
-        self.emit("    lea rdx, msg") # Second arg to printf (the value)
+        self.emit("    mov rcx, rax")
+        self.emit("    lea rdx, msg")
         self.emit("    call printf")
         self.emit("    mov rcx, 0")
         self.emit("    call ExitProcess")
@@ -383,25 +381,32 @@ class MiniCompilerGUI(ctk.CTk):
 
             # --- ASSEMBLE ---
             self.log("[*] Assembling...")
-            # Using list2cmdline to correctly quote paths with spaces
-            cmd_assemble_inner = f'call "{vcvars}" >nul && "{ml64}" /c /nologo "{asm_path}" /Fo"{obj_path}"'
+            
+            # We construct the exact cmd.exe string, quoting ONLY the executable and the arguments individually
+            # /Fo needs to be right next to the path.
+            asm_cmd = f'call "{vcvars}" >nul && "{ml64}" /c /nologo "{asm_path}" /Fo"{obj_path}"'
             
             res_asm = subprocess.run(
-                f'cmd.exe /c "{cmd_assemble_inner}"', 
+                asm_cmd, 
                 capture_output=True, text=True, shell=True
             )
             
             if res_asm.returncode != 0:
                 self.log("[-] Assembler Error:\n" + res_asm.stdout + res_asm.stderr)
                 return
+                
+            if not os.path.exists(obj_path):
+                self.log(f"[-] Error: Assembler claimed success, but {obj_path} was not created.")
+                self.log("This usually means the path has weird characters or permission issues.")
+                return
 
             # --- LINK ---
             self.log("[*] Linking...")
             # Added /ENTRY:main_wrapper so the linker knows where the program starts
-            cmd_link_inner = f'call "{vcvars}" >nul && "{link}" /nologo /SUBSYSTEM:CONSOLE /ENTRY:main_wrapper "{obj_path}" /OUT:"{exe_path}"'
+            link_cmd = f'call "{vcvars}" >nul && "{link}" /nologo /SUBSYSTEM:CONSOLE /ENTRY:main_wrapper "{obj_path}" /OUT:"{exe_path}"'
             
             res_link = subprocess.run(
-                f'cmd.exe /c "{cmd_link_inner}"', 
+                link_cmd, 
                 capture_output=True, text=True, shell=True
             )
             
