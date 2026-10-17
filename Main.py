@@ -360,13 +360,13 @@ class MiniCompilerGUI(ctk.CTk):
             codegen = CodeGenerator()
             asm_output = codegen.generate(ast)
 
-            # Normalize paths: convert all forward slashes to backslashes
+            # Normalize paths
             out_dir = os.path.dirname(self.file_path).replace("/", "\\")
             base_name = os.path.splitext(os.path.basename(self.file_path))[0]
             
-            asm_path = f"{out_dir}\\{base_name}.asm"
-            obj_path = f"{out_dir}\\{base_name}.obj"
-            exe_path = f"{out_dir}\\{base_name}.exe"
+            asm_path = os.path.join(out_dir, base_name + ".asm")
+            obj_path = os.path.join(out_dir, base_name + ".obj")
+            exe_path = os.path.join(out_dir, base_name + ".exe")
 
             with open(asm_path, "w") as f:
                 f.write(asm_output)
@@ -384,8 +384,6 @@ class MiniCompilerGUI(ctk.CTk):
             # --- ASSEMBLE ---
             self.log("[*] Assembling...")
             
-            # We construct a raw batch command. We use `cd /d` to change to the directory
-            # so that ml64 doesn't have to deal with the spaces in the absolute path.
             asm_cmd = (
                 f'cmd.exe /c "call "{vcvars}" >nul && '
                 f'cd /d "{out_dir}" && '
